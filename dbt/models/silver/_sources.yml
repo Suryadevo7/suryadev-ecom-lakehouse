@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: Raw landing zone written by src/generate.py (hive-partitioned by ingest_date).
+    meta:
+      external_location: >-
+        read_parquet('{{ env_var("BRONZE_PATH", "../data/bronze") }}/{name}/*/*.parquet',
+        hive_partitioning = true)
+    tables:
+      - name: customers
+      - name: products
+      - name: orders
+      - name: order_items
+      - name: events

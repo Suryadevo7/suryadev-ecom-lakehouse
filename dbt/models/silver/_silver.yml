@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: One row per valid customer (latest delivery wins).
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: email
+        data_tests: [not_null]
+      - name: signup_date
+        data_tests: [not_null]
+      - name: country
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [US, GB, DE, FR, IN, CA, AU, NL, ES, BR]
+
+  - name: stg_products
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: price
+        data_tests:
+          - not_null
+          - non_negative
+      - name: category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [electronics, home, apparel, beauty, sports, books, toys]
+
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: order_ts
+        data_tests: [not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [placed, shipped, delivered, cancelled, returned]
+
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        data_tests: [unique, not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: quantity
+        data_tests: [not_null, positive]
+      - name: unit_price
+        data_tests: [not_null, non_negative]
+
+  - name: stg_events
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: session_id
+        data_tests: [not_null]
+      - name: event_ts
+        data_tests: [not_null]
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [page_view, product_view, add_to_cart, checkout, purchase]
+      - name: customer_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: product_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+
+  - name: rejected_rows
+    description: Quarantine table. bronze = stg_* + rejected_rows, per entity.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [entity, record_id]
+    columns:
+      - name: entity
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [customers, products, orders, order_items, events]
+      - name: reject_reason
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [duplicate, null_required_field, invalid_date, negative_price,
+                         invalid_quantity, invalid_status, invalid_event_type, orphan_fk]
+      - name: raw_payload
+        data_tests: [not_null]

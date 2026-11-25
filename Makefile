@@ -4,8 +4,10 @@ BIN    := $(VENV)/bin
 PY     := $(BIN)/python
 ROWS   ?= 10000
 SEED   ?= 42
+DBT    := cd dbt && DBT_VERSION_CHECK=false ../$(BIN)/dbt
+DBT_ARGS := --profiles-dir .
 
-.PHONY: setup generate clean
+.PHONY: setup generate run clean
 
 setup: $(VENV)/.installed
 
@@ -17,6 +19,9 @@ $(VENV)/.installed: requirements.txt
 
 generate: setup
 	$(PY) src/generate.py --rows $(ROWS) --seed $(SEED) --out data/bronze
+
+run: setup
+	$(DBT) run $(DBT_ARGS)
 
 clean:
 	rm -rf data dbt/target dbt/logs logs .pytest_cache
