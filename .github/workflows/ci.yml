@@ -52,19 +52,12 @@ jobs:
         shell: pwsh
         run: ./make.ps1 all
 
-  # Publish dbt docs (model descriptions, column docs, lineage graph) to GitHub Pages.
-  docs:
+  # Build the dbt docs site (model descriptions, column docs, lineage graph).
+  docs-build:
     if: github.ref == 'refs/heads/main'
     needs: pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
 
@@ -86,5 +79,17 @@ jobs:
         with:
           path: site
 
+  # Deploy in a separate job (GitHub's recommended pattern) so the artifact is fully registered first.
+  docs-deploy:
+    needs: docs-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v5
