@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: daily_revenue
+    description: Recognised revenue per order date (late-arriving orders counted on their business date).
+    columns:
+      - name: order_date
+        data_tests: [unique, not_null]
+      - name: revenue
+        data_tests: [not_null, non_negative]
+      - name: orders
+        data_tests: [not_null, non_negative]
+
+  - name: customer_ltv
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: lifetime_revenue
+        data_tests: [not_null, non_negative]
+      - name: ltv_segment
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [high, mid, low, none]
+
+  - name: conversion_funnel
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: [event_date, stage]
+    columns:
+      - name: event_date
+        data_tests: [not_null]
+      - name: stage
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [page_view, product_view, add_to_cart, checkout, purchase]
+      - name: sessions
+        data_tests: [not_null, non_negative]
+
+  - name: top_products
+    columns:
+      - name: product_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: revenue_rank
+        data_tests: [unique, not_null]
+      - name: revenue
+        data_tests: [not_null, non_negative]

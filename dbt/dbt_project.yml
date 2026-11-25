@@ -21,3 +21,6 @@ models:
       +materialized: table
       checks:
         +materialized: view
+    gold:
+      +schema: gold
+      +materialized: table
