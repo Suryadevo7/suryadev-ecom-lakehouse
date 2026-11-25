@@ -9,7 +9,12 @@ sources:
         hive_partitioning = true)
     tables:
       - name: customers
+        description: Customer master data. Initial snapshot on day 0; some customers arrive weeks late.
       - name: products
+        description: Product catalogue snapshot (prices may be missing or negative).
       - name: orders
+        description: Order headers; order_ts is a raw string (may be unparseable).
       - name: order_items
+        description: Order lines; may reference unknown orders or products.
       - name: events
+        description: Clickstream events for the conversion funnel.

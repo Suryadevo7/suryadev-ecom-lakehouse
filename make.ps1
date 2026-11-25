@@ -6,7 +6,7 @@
   .\make.ps1 generate -Rows 500
 #>
 param(
-    [ValidateSet("help", "setup", "lint", "generate", "run", "test", "all", "clean", "distclean")]
+    [ValidateSet("help", "setup", "lint", "generate", "run", "test", "docs", "all", "clean", "distclean")]
     [string]$Target = "help",
     [int]$Rows = 10000,
     [int]$Seed = 42
@@ -55,6 +55,12 @@ function Test  {
     $env:RECONCILE_STRICT = "1"
     try { Invoke-Step { & $Py -m pytest -v } } finally { Remove-Item Env:RECONCILE_STRICT }
 }
+function Docs {
+    Setup
+    Push-Location dbt
+    try { Invoke-Step { & (Join-Path ".." $Dbt) docs generate --static --profiles-dir . } } finally { Pop-Location }
+    "open dbt\target\static_index.html in a browser"
+}
 function Clean {
     foreach ($p in "data", "dbt/target", "dbt/logs", "dbt/.user.yml", "logs", ".pytest_cache") {
         if (Test-Path $p) { Remove-Item -Recurse -Force $p }
@@ -62,12 +68,13 @@ function Clean {
 }
 
 switch ($Target) {
-    "help"      { "targets: setup lint generate run test all clean distclean   (-Rows $Rows -Seed $Seed)" }
+    "help"      { "targets: setup lint generate run test docs all clean distclean   (-Rows $Rows -Seed $Seed)" }
     "setup"     { Setup }
     "lint"      { Lint }
     "generate"  { Generate }
     "run"       { Run }
     "test"      { Test }
+    "docs"      { Docs }
     "all"       { Setup; Lint; Generate; Run; Test }
     "clean"     { Clean }
     "distclean" { Clean; if (Test-Path $Venv) { Remove-Item -Recurse -Force $Venv } }

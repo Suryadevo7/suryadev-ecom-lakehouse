@@ -21,10 +21,10 @@ DBT    := cd dbt && DBT_VERSION_CHECK=false ../$(BIN)/dbt
 DBT_ARGS := --profiles-dir .
 
 .DEFAULT_GOAL := help
-.PHONY: help setup lint generate run test all clean distclean
+.PHONY: help setup lint generate run test docs all clean distclean
 
 help:
-	@echo "targets: setup lint generate run test all clean distclean   (vars: ROWS=$(ROWS) SEED=$(SEED))"
+	@echo "targets: setup lint generate run test docs all clean distclean   (vars: ROWS=$(ROWS) SEED=$(SEED))"
 
 setup: $(VENV)/.installed
 
@@ -51,6 +51,11 @@ run: setup
 test: setup
 	$(DBT) test $(DBT_ARGS)
 	RECONCILE_STRICT=1 $(PY) -m pytest -v
+
+## dbt docs + lineage graph as one self-contained HTML file (needs `make run` first)
+docs: setup
+	$(DBT) docs generate --static $(DBT_ARGS)
+	@echo "open dbt/target/static_index.html in a browser"
 
 all: setup lint generate run test
 

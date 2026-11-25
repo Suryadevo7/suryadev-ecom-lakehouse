@@ -1,63 +1,104 @@
 version: 2
 
 models:
-  - name: daily_revenue
-    description: Recognised revenue per order date (late-arriving orders counted on their business date).
-    columns:
-      - name: order_date
-        data_tests: [unique, not_null]
-      - name: revenue
-        data_tests: [not_null, non_negative]
-      - name: orders
-        data_tests: [not_null, non_negative]
-
-  - name: customer_ltv
-    columns:
-      - name: customer_id
-        data_tests:
-          - unique
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('stg_customers')
-                field: customer_id
-      - name: lifetime_revenue
-        data_tests: [not_null, non_negative]
-      - name: ltv_segment
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [high, mid, low, none]
-
-  - name: conversion_funnel
+- name: daily_revenue
+  description: One row per calendar day. Recognised revenue (excludes cancelled and returned orders), counted on
+    the order's business date, so late-arriving orders land on the correct day.
+  columns:
+  - name: order_date
+    description: Business date (primary key). Days with no orders appear with zeros.
     data_tests:
-      - unique_combination:
-          arguments:
-            columns: [event_date, stage]
-    columns:
-      - name: event_date
-        data_tests: [not_null]
-      - name: stage
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [page_view, product_view, add_to_cart, checkout, purchase]
-      - name: sessions
-        data_tests: [not_null, non_negative]
-
-  - name: top_products
-    columns:
-      - name: product_id
-        data_tests:
-          - unique
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('stg_products')
-                field: product_id
-      - name: revenue_rank
-        data_tests: [unique, not_null]
-      - name: revenue
-        data_tests: [not_null, non_negative]
+    - unique
+    - not_null
+  - name: revenue
+    description: Sum of line totals for recognised orders.
+    data_tests:
+    - not_null
+    - non_negative
+  - name: orders
+    description: Recognised orders placed that day.
+    data_tests:
+    - not_null
+    - non_negative
+- name: customer_ltv
+  description: One row per valid customer with lifetime value and a value segment, including customers who never
+    ordered.
+  columns:
+  - name: customer_id
+    description: Primary key, FK to stg_customers.
+    data_tests:
+    - unique
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_customers')
+          field: customer_id
+  - name: lifetime_revenue
+    description: Total recognised revenue from this customer.
+    data_tests:
+    - not_null
+    - non_negative
+  - name: ltv_segment
+    description: high >= 1000, mid >= 400, low > 0, none = 0.
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - high
+          - mid
+          - low
+          - none
+- name: conversion_funnel
+  description: Daily session funnel page_view -> product_view -> add_to_cart -> checkout -> purchase. A session
+    counts toward every stage up to its deepest valid event, which keeps the funnel monotonic.
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - event_date
+        - stage
+  columns:
+  - name: event_date
+    description: Session date.
+    data_tests:
+    - not_null
+  - name: stage
+    description: Funnel stage.
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - page_view
+          - product_view
+          - add_to_cart
+          - checkout
+          - purchase
+  - name: sessions
+    description: Sessions that reached at least this stage.
+    data_tests:
+    - not_null
+    - non_negative
+- name: top_products
+  description: Product leaderboard by recognised revenue, with overall and within-category ranks.
+  columns:
+  - name: product_id
+    description: Primary key, FK to stg_products.
+    data_tests:
+    - unique
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_products')
+          field: product_id
+  - name: revenue_rank
+    description: 1 = highest revenue; ties broken by product_id.
+    data_tests:
+    - unique
+    - not_null
+  - name: revenue
+    description: Recognised revenue from this product.
+    data_tests:
+    - not_null
+    - non_negative

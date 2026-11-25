@@ -1,122 +1,214 @@
 version: 2
 
 models:
-  - name: stg_customers
-    description: One row per valid customer (latest delivery wins).
-    columns:
-      - name: customer_id
-        data_tests: [unique, not_null]
-      - name: email
-        data_tests: [not_null]
-      - name: signup_date
-        data_tests: [not_null]
-      - name: country
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [US, GB, DE, FR, IN, CA, AU, NL, ES, BR]
-
-  - name: stg_products
-    columns:
-      - name: product_id
-        data_tests: [unique, not_null]
-      - name: price
-        data_tests:
-          - not_null
-          - non_negative
-      - name: category
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [electronics, home, apparel, beauty, sports, books, toys]
-
-  - name: stg_orders
-    columns:
-      - name: order_id
-        data_tests: [unique, not_null]
-      - name: customer_id
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('stg_customers')
-                field: customer_id
-      - name: order_ts
-        data_tests: [not_null]
-      - name: status
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [placed, shipped, delivered, cancelled, returned]
-
-  - name: stg_order_items
-    columns:
-      - name: order_item_id
-        data_tests: [unique, not_null]
-      - name: order_id
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('stg_orders')
-                field: order_id
-      - name: product_id
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('stg_products')
-                field: product_id
-      - name: quantity
-        data_tests: [not_null, positive]
-      - name: unit_price
-        data_tests: [not_null, non_negative]
-
-  - name: stg_events
-    columns:
-      - name: event_id
-        data_tests: [unique, not_null]
-      - name: session_id
-        data_tests: [not_null]
-      - name: event_ts
-        data_tests: [not_null]
-      - name: event_type
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [page_view, product_view, add_to_cart, checkout, purchase]
-      - name: customer_id
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('stg_customers')
-                field: customer_id
-      - name: product_id
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('stg_products')
-                field: product_id
-
-  - name: rejected_rows
-    description: Quarantine table. bronze = stg_* + rejected_rows, per entity.
+- name: stg_customers
+  description: Valid customers, one row per customer_id. When a customer is re-delivered, the newest ingest wins
+    (CDC-style email updates).
+  columns:
+  - name: customer_id
+    description: Primary key.
     data_tests:
-      - unique_combination:
-          arguments:
-            columns: [entity, record_id]
-    columns:
-      - name: entity
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [customers, products, orders, order_items, events]
-      - name: reject_reason
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [duplicate, null_required_field, invalid_date, negative_price,
-                         invalid_quantity, invalid_status, invalid_event_type, orphan_fk]
-      - name: raw_payload
-        data_tests: [not_null]
+    - unique
+    - not_null
+  - name: email
+    description: Lower-cased, trimmed email.
+    data_tests:
+    - not_null
+  - name: signup_date
+    description: Parsed signup date; rows with unparseable or out-of-window dates are quarantined.
+    data_tests:
+    - not_null
+  - name: country
+    description: ISO-2 country code, upper-cased.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - US
+          - GB
+          - DE
+          - FR
+          - IN
+          - CA
+          - AU
+          - NL
+          - ES
+          - BR
+- name: stg_products
+  description: Valid product catalogue. Products with missing or negative prices are quarantined.
+  columns:
+  - name: product_id
+    description: Primary key.
+    data_tests:
+    - unique
+    - not_null
+  - name: price
+    description: List price, decimal(12,2), never negative.
+    data_tests:
+    - not_null
+    - non_negative
+  - name: category
+    description: Normalised product category.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - electronics
+          - home
+          - apparel
+          - beauty
+          - sports
+          - books
+          - toys
+- name: stg_orders
+  description: Valid orders. Each order's customer must exist in stg_customers; late-arriving orders are kept and
+    flagged.
+  columns:
+  - name: order_id
+    description: Primary key.
+    data_tests:
+    - unique
+    - not_null
+  - name: customer_id
+    description: FK to stg_customers.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_customers')
+          field: customer_id
+  - name: order_ts
+    description: Parsed order timestamp (business time).
+    data_tests:
+    - not_null
+  - name: status
+    description: Order status, normalised with lower(trim()).
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - placed
+          - shipped
+          - delivered
+          - cancelled
+          - returned
+  - name: is_late_arriving
+    description: True when the row landed in bronze more than one day after its order date.
+- name: stg_order_items
+  description: Valid order lines. Parent order and product must both have survived silver validation.
+  columns:
+  - name: order_item_id
+    description: Primary key.
+    data_tests:
+    - unique
+    - not_null
+  - name: order_id
+    description: FK to stg_orders.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_orders')
+          field: order_id
+  - name: product_id
+    description: FK to stg_products.
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('stg_products')
+          field: product_id
+  - name: quantity
+    description: Units, always > 0.
+    data_tests:
+    - not_null
+    - positive
+  - name: unit_price
+    description: Price paid per unit, never negative.
+    data_tests:
+    - not_null
+    - non_negative
+- name: stg_events
+  description: Valid clickstream events. customer_id is null for anonymous visitors and product_id is null for page
+    views; both are valid.
+  columns:
+  - name: event_id
+    description: Primary key.
+    data_tests:
+    - unique
+    - not_null
+  - name: session_id
+    description: Browsing session identifier.
+    data_tests:
+    - not_null
+  - name: event_ts
+    description: Parsed event timestamp.
+    data_tests:
+    - not_null
+  - name: event_type
+    description: Funnel stage, normalised.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - page_view
+          - product_view
+          - add_to_cart
+          - checkout
+          - purchase
+  - name: customer_id
+    description: FK to stg_customers, nullable (anonymous).
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_customers')
+          field: customer_id
+  - name: product_id
+    description: FK to stg_products, nullable (page views).
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_products')
+          field: product_id
+- name: rejected_rows
+  description: Quarantine. Every bronze row that is not in a stg_* table is here exactly once, with one reason and
+    its original payload. bronze = stg_* + rejected_rows per entity.
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - entity
+        - record_id
+  columns:
+  - name: entity
+    description: Source entity the row came from.
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - customers
+          - products
+          - orders
+          - order_items
+          - events
+  - name: reject_reason
+    description: 'First failing rule: duplicate, null_required_field, invalid_date, negative_price, invalid_quantity,
+      invalid_status, invalid_event_type, orphan_fk.'
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - duplicate
+          - null_required_field
+          - invalid_date
+          - negative_price
+          - invalid_quantity
+          - invalid_status
+          - invalid_event_type
+          - orphan_fk
+  - name: raw_payload
+    description: The original bronze row as JSON, for debugging and replay.
+    data_tests:
+    - not_null
