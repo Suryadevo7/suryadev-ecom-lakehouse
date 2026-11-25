@@ -49,9 +49,7 @@ FUNNEL = ("page_view", "product_view", "add_to_cart", "checkout", "purchase")
 # probability of advancing from stage i to stage i+1
 FUNNEL_ADVANCE = (0.60, 0.50, 0.60, 0.70)
 
-BAD_DATES = np.array(
-    ["2025-02-30", "not-a-date", "31/12/2025", "", "2099-01-01T00:00:00", "0000-00-00", "2025-13-01"]
-)
+BAD_DATES = np.array(["2025-02-30", "not-a-date", "31/12/2025", "", "2099-01-01T00:00:00", "0000-00-00", "2025-13-01"])
 BAD_EVENT_TYPES = np.array(["unknown", "click??", "page-vue", "null"])
 
 
@@ -161,8 +159,15 @@ def gen_customers(rng, n: int, dirt: DirtConfig, stats: dict):
     # i.e. after some of their orders have already been ingested.
     ingest, late = _late_lag(rng, n, dirt.late_rate, 5, 60)
     stats["late"] = int(late.sum())
-    cols = dict(customer_id=ids, email=email, email_null=email_null, first_name=first, last_name=last,
-                country=country, signup_date=signup)
+    cols = dict(
+        customer_id=ids,
+        email=email,
+        email_null=email_null,
+        first_name=first,
+        last_name=last,
+        country=country,
+        signup_date=signup,
+    )
     cols, ingest, dup_idx = _add_duplicates(rng, cols, ingest, dirt.duplicate_rate)
     # half of the re-delivered customers carry an updated email (CDC-style change)
     changed = np.arange(n, n + len(dup_idx))[rng.random(len(dup_idx)) < 0.5]
@@ -170,20 +175,24 @@ def gen_customers(rng, n: int, dirt: DirtConfig, stats: dict):
     for i in changed:
         cols["email"][i] = f"user{cols['customer_id'][i]}+new@example.com"
     stats["duplicates"] = len(dup_idx)
-    return _finalize(cols, ingest, {
-        "customer_id": lambda c: pa.array(c["customer_id"].astype("int64")),
-        "email": lambda c: _nullable_str(c["email"], c["email_null"]),
-        "first_name": lambda c: _nullable_str(c["first_name"]),
-        "last_name": lambda c: _nullable_str(c["last_name"]),
-        "country": lambda c: _nullable_str(c["country"]),
-        "signup_date": lambda c: _nullable_str(c["signup_date"]),
-    })
+    return _finalize(
+        cols,
+        ingest,
+        {
+            "customer_id": lambda c: pa.array(c["customer_id"].astype("int64")),
+            "email": lambda c: _nullable_str(c["email"], c["email_null"]),
+            "first_name": lambda c: _nullable_str(c["first_name"]),
+            "last_name": lambda c: _nullable_str(c["last_name"]),
+            "country": lambda c: _nullable_str(c["country"]),
+            "signup_date": lambda c: _nullable_str(c["signup_date"]),
+        },
+    )
 
 
 def gen_products(rng, n: int, dirt: DirtConfig, stats: dict):
     ids = np.arange(1, n + 1)
     category = rng.choice(CATEGORIES, n)
-    name = np.array([f"{c.title()} Item {i:04d}" for c, i in zip(category, ids)], dtype=object)
+    name = np.array([f"{c.title()} Item {i:04d}" for c, i in zip(category, ids, strict=True)], dtype=object)
     price = np.round(rng.lognormal(3.3, 0.8, n), 2)  # median ~ $27
     neg = _mask(rng, n, dirt.negative_price_rate)
     price[neg] = -price[neg]
@@ -193,12 +202,16 @@ def gen_products(rng, n: int, dirt: DirtConfig, stats: dict):
     cols = dict(product_id=ids, name=name, category=category, price=price, price_null=price_null)
     cols, ingest, dup_idx = _add_duplicates(rng, cols, ingest, dirt.duplicate_rate)
     stats["duplicates"] = len(dup_idx)
-    return _finalize(cols, ingest, {
-        "product_id": lambda c: pa.array(c["product_id"].astype("int64")),
-        "name": lambda c: _nullable_str(c["name"]),
-        "category": lambda c: _nullable_str(c["category"]),
-        "price": lambda c: _nullable_float(c["price"], c["price_null"]),
-    }), np.where(price_null, np.nan, np.abs(price))
+    return _finalize(
+        cols,
+        ingest,
+        {
+            "product_id": lambda c: pa.array(c["product_id"].astype("int64")),
+            "name": lambda c: _nullable_str(c["name"]),
+            "category": lambda c: _nullable_str(c["category"]),
+            "price": lambda c: _nullable_float(c["price"], c["price_null"]),
+        },
+    ), np.where(price_null, np.nan, np.abs(price))
 
 
 def gen_orders(rng, n: int, n_customers: int, dirt: DirtConfig, stats: dict):
@@ -219,17 +232,22 @@ def gen_orders(rng, n: int, n_customers: int, dirt: DirtConfig, stats: dict):
     cols = dict(order_id=ids, customer_id=customer, cust_null=cust_null, order_ts=ts, status=status)
     cols, ingest_all, dup_idx = _add_duplicates(rng, cols, ingest, dirt.duplicate_rate)
     stats["duplicates"] = len(dup_idx)
-    table = _finalize(cols, ingest_all, {
-        "order_id": lambda c: pa.array(c["order_id"].astype("int64")),
-        "customer_id": lambda c: _nullable_int(c["customer_id"], c["cust_null"]),
-        "order_ts": lambda c: _nullable_str(c["order_ts"]),
-        "status": lambda c: _nullable_str(c["status"]),
-    })
+    table = _finalize(
+        cols,
+        ingest_all,
+        {
+            "order_id": lambda c: pa.array(c["order_id"].astype("int64")),
+            "customer_id": lambda c: _nullable_int(c["customer_id"], c["cust_null"]),
+            "order_ts": lambda c: _nullable_str(c["order_ts"]),
+            "status": lambda c: _nullable_str(c["status"]),
+        },
+    )
     return table, ingest  # per-order ingest day (pre-duplication), used for items
 
 
-def gen_order_items(rng, order_ingest: np.ndarray, n_products: int, product_price: np.ndarray,
-                    dirt: DirtConfig, stats: dict):
+def gen_order_items(
+    rng, order_ingest: np.ndarray, n_products: int, product_price: np.ndarray, dirt: DirtConfig, stats: dict
+):
     n_orders = len(order_ingest)
     per_order = rng.integers(1, 5, n_orders)  # 1-4 lines per order
     order_id = np.repeat(np.arange(1, n_orders + 1), per_order)
@@ -249,19 +267,34 @@ def gen_order_items(rng, order_ingest: np.ndarray, n_products: int, product_pric
     # items land with their order, some arrive late on their own
     lag, late = _late_lag(rng, n, dirt.late_rate, 1, 10)
     ingest = np.repeat(order_ingest, per_order) + lag
-    stats.update(negative_prices=int(neg.sum()), bad_quantities=int(badq.sum()),
-                 orphans=int(orphan.sum()), nulls=int(oid_null.sum()), late=int(late.sum()))
-    cols = dict(order_item_id=ids, order_id=order_id, oid_null=oid_null, product_id=product,
-                quantity=quantity, unit_price=unit_price)
+    stats.update(
+        negative_prices=int(neg.sum()),
+        bad_quantities=int(badq.sum()),
+        orphans=int(orphan.sum()),
+        nulls=int(oid_null.sum()),
+        late=int(late.sum()),
+    )
+    cols = dict(
+        order_item_id=ids,
+        order_id=order_id,
+        oid_null=oid_null,
+        product_id=product,
+        quantity=quantity,
+        unit_price=unit_price,
+    )
     cols, ingest, dup_idx = _add_duplicates(rng, cols, ingest, dirt.duplicate_rate)
     stats["duplicates"] = len(dup_idx)
-    return _finalize(cols, ingest, {
-        "order_item_id": lambda c: pa.array(c["order_item_id"].astype("int64")),
-        "order_id": lambda c: _nullable_int(c["order_id"], c["oid_null"]),
-        "product_id": lambda c: pa.array(c["product_id"].astype("int64")),
-        "quantity": lambda c: pa.array(c["quantity"].astype("int64")),
-        "unit_price": lambda c: _nullable_float(c["unit_price"], np.zeros(len(c["unit_price"]), bool)),
-    })
+    return _finalize(
+        cols,
+        ingest,
+        {
+            "order_item_id": lambda c: pa.array(c["order_item_id"].astype("int64")),
+            "order_id": lambda c: _nullable_int(c["order_id"], c["oid_null"]),
+            "product_id": lambda c: pa.array(c["product_id"].astype("int64")),
+            "quantity": lambda c: pa.array(c["quantity"].astype("int64")),
+            "unit_price": lambda c: _nullable_float(c["unit_price"], np.zeros(len(c["unit_price"]), bool)),
+        },
+    )
 
 
 def gen_events(rng, n_sessions: int, n_customers: int, n_products: int, dirt: DirtConfig, stats: dict):
@@ -296,21 +329,37 @@ def gen_events(rng, n_sessions: int, n_customers: int, n_products: int, dirt: Di
     session_id = np.array([f"s{i:08d}" for i in session_idx], dtype=object)
     sess_null = _mask(rng, n, dirt.null_rate)
     lag, late = _late_lag(rng, n, dirt.late_rate, 1, 7)
-    stats.update(invalid_event_types=int(invalid.sum()), orphans=int(orphan.sum()),
-                 nulls=int(sess_null.sum()), late=int(late.sum()))
-    cols = dict(event_id=np.arange(1, n + 1), session_id=session_id, sess_null=sess_null,
-                customer_id=customer, cust_null=cust_null, product_id=product, prod_null=prod_null,
-                event_type=event_type, event_ts=ts)
+    stats.update(
+        invalid_event_types=int(invalid.sum()),
+        orphans=int(orphan.sum()),
+        nulls=int(sess_null.sum()),
+        late=int(late.sum()),
+    )
+    cols = dict(
+        event_id=np.arange(1, n + 1),
+        session_id=session_id,
+        sess_null=sess_null,
+        customer_id=customer,
+        cust_null=cust_null,
+        product_id=product,
+        prod_null=prod_null,
+        event_type=event_type,
+        event_ts=ts,
+    )
     cols, ingest, dup_idx = _add_duplicates(rng, cols, day + lag, dirt.duplicate_rate)
     stats["duplicates"] = len(dup_idx)
-    return _finalize(cols, ingest, {
-        "event_id": lambda c: pa.array(c["event_id"].astype("int64")),
-        "session_id": lambda c: _nullable_str(c["session_id"], c["sess_null"]),
-        "customer_id": lambda c: _nullable_int(c["customer_id"], c["cust_null"]),
-        "product_id": lambda c: _nullable_int(c["product_id"], c["prod_null"]),
-        "event_type": lambda c: _nullable_str(c["event_type"]),
-        "event_ts": lambda c: _nullable_str(c["event_ts"]),
-    })
+    return _finalize(
+        cols,
+        ingest,
+        {
+            "event_id": lambda c: pa.array(c["event_id"].astype("int64")),
+            "session_id": lambda c: _nullable_str(c["session_id"], c["sess_null"]),
+            "customer_id": lambda c: _nullable_int(c["customer_id"], c["cust_null"]),
+            "product_id": lambda c: _nullable_int(c["product_id"], c["prod_null"]),
+            "event_type": lambda c: _nullable_str(c["event_type"]),
+            "event_ts": lambda c: _nullable_str(c["event_ts"]),
+        },
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -354,7 +403,7 @@ def generate(rows: int, seed: int, out: Path, dirt: DirtConfig = DirtConfig()) -
     events = gen_events(rng, sizes["sessions"], sizes["customers"], sizes["products"], dirt, stats["events"])
 
     out.mkdir(parents=True, exist_ok=True)
-    for name, (table, ingest) in zip(ENTITIES, (customers, products, orders, items, events)):
+    for name, (table, ingest) in zip(ENTITIES, (customers, products, orders, items, events), strict=True):
         stats[name]["partitions"] = write_partitioned(table, ingest, out / name)
         stats[name]["rows"] = table.num_rows
     return stats
@@ -368,12 +417,39 @@ def main(argv: list[str] | None = None) -> None:
     args = p.parse_args(argv)
 
     stats = generate(args.rows, args.seed, args.out)
-    keys = ["rows", "partitions", "duplicates", "nulls", "bad_dates", "negative_prices",
-            "bad_quantities", "orphans", "invalid_event_types", "messy_case", "late"]
+    keys = [
+        "rows",
+        "partitions",
+        "duplicates",
+        "nulls",
+        "bad_dates",
+        "negative_prices",
+        "bad_quantities",
+        "orphans",
+        "invalid_event_types",
+        "messy_case",
+        "late",
+    ]
     print(f"bronze written to {args.out}  (rows={args.rows}, seed={args.seed})")
-    print(f"{'entity':<12}" + "".join(f"{k:>11}" for k in ["rows", "parts", "dups", "nulls", "bad_dt",
-                                                             "neg_px", "bad_qty", "orphans", "bad_evt",
-                                                             "messy", "late"]))
+    print(
+        f"{'entity':<12}"
+        + "".join(
+            f"{k:>11}"
+            for k in [
+                "rows",
+                "parts",
+                "dups",
+                "nulls",
+                "bad_dt",
+                "neg_px",
+                "bad_qty",
+                "orphans",
+                "bad_evt",
+                "messy",
+                "late",
+            ]
+        )
+    )
     for e in ENTITIES:
         print(f"{e:<12}" + "".join(f"{stats[e].get(k, '-'):>11}" for k in keys))
 

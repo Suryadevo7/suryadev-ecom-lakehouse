@@ -22,8 +22,7 @@ def _q(root: Path, sql: str):
 
 def _digest(root: Path) -> dict[str, str]:
     return {
-        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(root.rglob("*.parquet"))
+        str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob("*.parquet"))
     }
 
 
@@ -107,10 +106,16 @@ def test_record_id_unique(bronze, entity):
 
 
 # ---- injected dirt ----------------------------------------------------------
-@pytest.mark.parametrize("entity,pk", [
-    ("customers", "customer_id"), ("products", "product_id"), ("orders", "order_id"),
-    ("order_items", "order_item_id"), ("events", "event_id"),
-])
+@pytest.mark.parametrize(
+    "entity,pk",
+    [
+        ("customers", "customer_id"),
+        ("products", "product_id"),
+        ("orders", "order_id"),
+        ("order_items", "order_item_id"),
+        ("events", "event_id"),
+    ],
+)
 def test_has_duplicates(bronze, entity, pk):
     n, d = _q(bronze, f"select count(*), count(distinct {pk}) from {{{entity}}}")[0]
     assert n > d
@@ -124,8 +129,9 @@ def test_has_nulls(bronze):
 
 def test_has_bad_dates(bronze):
     for entity, col in [("customers", "signup_date"), ("orders", "order_ts"), ("events", "event_ts")]:
-        bad = _q(bronze, f"select count(*) from {{{entity}}} "
-                         f"where try_cast({col} as timestamp) is null or {col} >= '2026'")[0][0]
+        bad = _q(
+            bronze, f"select count(*) from {{{entity}}} where try_cast({col} as timestamp) is null or {col} >= '2026'"
+        )[0][0]
         assert bad > 0, entity
 
 
@@ -136,23 +142,39 @@ def test_has_negative_prices_and_bad_quantities(bronze):
 
 
 def test_has_orphan_foreign_keys(bronze):
-    assert _q(bronze, "select count(*) from {orders} o where o.customer_id is not null "
-                      "and o.customer_id not in (select customer_id from {customers})")[0][0] > 0
-    assert _q(bronze, "select count(*) from {order_items} i "
-                      "where i.product_id not in (select product_id from {products})")[0][0] > 0
+    assert (
+        _q(
+            bronze,
+            "select count(*) from {orders} o where o.customer_id is not null "
+            "and o.customer_id not in (select customer_id from {customers})",
+        )[0][0]
+        > 0
+    )
+    assert (
+        _q(
+            bronze, "select count(*) from {order_items} i where i.product_id not in (select product_id from {products})"
+        )[0][0]
+        > 0
+    )
 
 
 def test_has_invalid_and_messy_event_types(bronze):
     funnel = "('page_view','product_view','add_to_cart','checkout','purchase')"
     assert _q(bronze, f"select count(*) from {{events}} where lower(trim(event_type)) not in {funnel}")[0][0] > 0
-    assert _q(bronze, f"select count(*) from {{events}} where event_type not in {funnel} "
-                      f"and lower(trim(event_type)) in {funnel}")[0][0] > 0
+    assert (
+        _q(
+            bronze,
+            f"select count(*) from {{events}} where event_type not in {funnel} and lower(trim(event_type)) in {funnel}",
+        )[0][0]
+        > 0
+    )
 
 
 def test_has_late_arriving_records(bronze):
     # business date earlier than the partition it landed in by more than a day
-    late = _q(bronze, "select count(*) from {orders} "
-                      "where try_cast(order_ts as timestamp)::date < ingest_date - 1")[0][0]
+    late = _q(bronze, "select count(*) from {orders} where try_cast(order_ts as timestamp)::date < ingest_date - 1")[0][
+        0
+    ]
     assert late > 0
     late_dim = _q(bronze, "select count(*) from {customers} where ingest_date > date '2025-01-04'")[0][0]
     assert late_dim > 0

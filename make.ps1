@@ -6,7 +6,7 @@
   .\make.ps1 generate -Rows 500
 #>
 param(
-    [ValidateSet("help", "setup", "generate", "run", "test", "all", "clean", "distclean")]
+    [ValidateSet("help", "setup", "lint", "generate", "run", "test", "all", "clean", "distclean")]
     [string]$Target = "help",
     [int]$Rows = 10000,
     [int]$Seed = 42
@@ -35,6 +35,13 @@ function Setup {
     New-Item -ItemType File -Force $stamp | Out-Null
 }
 
+function Lint {
+    Setup
+    $Ruff = Join-Path $Bin "ruff"
+    Invoke-Step { & $Ruff check . }
+    Invoke-Step { & $Ruff format --check . }
+}
+
 function Generate { Setup; Invoke-Step { & $Py src/generate.py --rows $Rows --seed $Seed --out data/bronze } }
 
 function Run-Dbt([string]$Command) {
@@ -55,12 +62,13 @@ function Clean {
 }
 
 switch ($Target) {
-    "help"      { "targets: setup generate run test all clean distclean   (-Rows $Rows -Seed $Seed)" }
+    "help"      { "targets: setup lint generate run test all clean distclean   (-Rows $Rows -Seed $Seed)" }
     "setup"     { Setup }
+    "lint"      { Lint }
     "generate"  { Generate }
     "run"       { Run }
     "test"      { Test }
-    "all"       { Setup; Generate; Run; Test }
+    "all"       { Setup; Lint; Generate; Run; Test }
     "clean"     { Clean }
     "distclean" { Clean; if (Test-Path $Venv) { Remove-Item -Recurse -Force $Venv } }
 }

@@ -5,11 +5,11 @@ import duckdb
 QUERIES = {
     "Where did bronze rows go? (reconciliation)": """
         with b as (
-            select 'customers' as entity, count(*) as bronze from read_parquet('data/bronze/customers/*/*.parquet') union all
-            select 'products',    count(*) from read_parquet('data/bronze/products/*/*.parquet')    union all
-            select 'orders',      count(*) from read_parquet('data/bronze/orders/*/*.parquet')      union all
-            select 'order_items', count(*) from read_parquet('data/bronze/order_items/*/*.parquet') union all
-            select 'events',      count(*) from read_parquet('data/bronze/events/*/*.parquet')
+            select 'customers' as entity, count(*) as bronze from {bronze}/customers/*/*.parquet') union all
+            select 'products',    count(*) from {bronze}/products/*/*.parquet')    union all
+            select 'orders',      count(*) from {bronze}/orders/*/*.parquet')      union all
+            select 'order_items', count(*) from {bronze}/order_items/*/*.parquet') union all
+            select 'events',      count(*) from {bronze}/events/*/*.parquet')
         ), s as (
             select 'customers' as entity, count(*) as silver from silver.stg_customers union all
             select 'products',    count(*) from silver.stg_products    union all
@@ -50,5 +50,5 @@ if __name__ == "__main__":
     con = duckdb.connect("data/lakehouse.duckdb", read_only=True)
     for title, sql in QUERIES.items():
         print(f"-- {title}")
-        con.sql(sql).show(max_width=200)
+        con.sql(sql.replace("{bronze}", "read_parquet('data/bronze")).show(max_width=200)
         print()

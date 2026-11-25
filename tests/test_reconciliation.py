@@ -38,9 +38,7 @@ def _bronze(entity: str) -> str:
 def test_counts_reconcile(con, entity):
     bronze = con.execute(f"select count(*) from {_bronze(entity)}").fetchone()[0]
     silver = con.execute(f"select count(*) from silver.stg_{entity}").fetchone()[0]
-    rejected = con.execute(
-        "select count(*) from silver.rejected_rows where entity = ?", [entity]
-    ).fetchone()[0]
+    rejected = con.execute("select count(*) from silver.rejected_rows where entity = ?", [entity]).fetchone()[0]
     print(f"{entity:<12} bronze={bronze:>6} silver={silver:>6} rejected={rejected:>5}")
     assert bronze > 0
     assert bronze == silver + rejected
@@ -66,8 +64,15 @@ def test_record_ids_partition_exactly(con, entity):
 def test_every_dirt_type_was_quarantined(con):
     """The generator injects each kind of dirt; silver must catch every kind."""
     reasons = {r for (r,) in con.execute("select distinct reject_reason from silver.rejected_rows").fetchall()}
-    assert {"duplicate", "null_required_field", "invalid_date", "negative_price",
-            "invalid_quantity", "invalid_event_type", "orphan_fk"} <= reasons
+    assert {
+        "duplicate",
+        "null_required_field",
+        "invalid_date",
+        "negative_price",
+        "invalid_quantity",
+        "invalid_event_type",
+        "orphan_fk",
+    } <= reasons
 
 
 def test_late_arriving_orders_survive(con):

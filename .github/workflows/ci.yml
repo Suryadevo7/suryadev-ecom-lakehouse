@@ -21,7 +21,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: make all (setup -> generate -> run -> test)
+      - name: make all (setup -> lint -> generate -> run -> test)
         run: make all
 
       - name: Upload dbt run artefacts
