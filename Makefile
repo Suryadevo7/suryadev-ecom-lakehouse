@@ -7,7 +7,7 @@ SEED   ?= 42
 DBT    := cd dbt && DBT_VERSION_CHECK=false ../$(BIN)/dbt
 DBT_ARGS := --profiles-dir .
 
-.PHONY: setup generate run clean
+.PHONY: setup generate run test clean
 
 setup: $(VENV)/.installed
 
@@ -22,6 +22,10 @@ generate: setup
 
 run: setup
 	$(DBT) run $(DBT_ARGS)
+
+test: setup
+	$(DBT) test $(DBT_ARGS)
+	RECONCILE_STRICT=1 $(PY) -m pytest -v
 
 clean:
 	rm -rf data dbt/target dbt/logs logs .pytest_cache
